@@ -28,9 +28,18 @@ dwp_col_names = c("ward", "local_authority", "claimant_count", "claimant_pct_16_
 # import data with new col names and filter to just Birmingham
 dwp_data <- read_excel("data/Priority wards WMCA - March 2026.xlsx",
                        skip = 5,
-                       col_names = dwp_col_names) |> 
+                       col_names = dwp_col_names,
+                       sheet = "Prority Wards 1") |> 
   filter(local_authority == "Birmingham")
 
+# also read in sheet with ethnic minority %
+dwp_data_ethnic_minority <- read_excel("data/Priority wards WMCA - March 2026.xlsx",
+                       skip = 4,
+                       sheet = "Priority Wards 2") |> 
+  rename(ward = `2021 electoral wards`,
+         local_authority = `...2`,
+         ethnic_minority_pct = `% Ethnic minority (all residents, non-white)`) |> 
+  filter(local_authority == "Birmingham")
 
 # Get 2024 population estimates from SQL ---------------------------------------
 
@@ -50,10 +59,16 @@ str_SQL_Code <- "SELECT [MidYear] AS mid_year
 # get data
 pop_est <- DBI::dbGetQuery(conpool, str_SQL_Code)
 
-# filter out 'all ages' and convert age to number
+# separate out 'all ages' for ethnic minority pct calculation
+pop_est_all_ages <- pop_est |> 
+  filter(age_group == "All Ages") |> 
+  mutate(ward_name = str_trim(ward_name))
+
+# filter out 'all ages' and convert age to number, for claimant count calculations
 pop_est <- pop_est |> 
   filter(age_group != "All Ages") |> 
-  mutate(age_group = as.numeric(age_group))
+  mutate(age_group = as.numeric(age_group)) |> 
+  mutate(ward_name = str_trim(ward_name))
 
 # summarise to get relevant age bandings - 16-64, 16-24 18-24, 50-64 --------
 
@@ -86,9 +101,9 @@ pop_est_grouped <- pop_est_grouped |>
   pivot_wider(names_from = "age_band",
               values_from = "population")
 
-# trim white space at end of ward names
-pop_est_grouped <- pop_est_grouped |> 
-  mutate(ward_name = str_trim(ward_name))
+# # trim white space at end of ward names
+# pop_est_grouped <- pop_est_grouped |> 
+#   mutate(ward_name = str_trim(ward_name))
 
 # Get best fit of wards to localities -------------------------------------
 
@@ -145,25 +160,27 @@ locality_wards_best_fit <- locality_wards |>
 
 # Join DWP data, pop ests and locality best fit ---------------------------
 
+# claimant data
 dwp_data <- dwp_data |> 
   left_join(pop_est_grouped,
             by = join_by("ward" == "ward_name")) |> 
   left_join(locality_wards_best_fit,
             by = join_by("ward" == "wd25nm"))
 
+# ethnic minority data
+dwp_data_ethnic_minority <- dwp_data_ethnic_minority |>
+  mutate(ward = str_replace(ward, " and ", " & ")) |> 
+  left_join(pop_est_all_ages,
+            by = join_by("ward" == "ward_name")) |> 
+  left_join(locality_wards_best_fit,
+            by = join_by("ward" == "wd25nm"))
 
-# Summarise by locality ---------------------------------------------------
+# Summarise claimant counts by locality, then calculate rates ---------------------------------------------------
 
 # use across() to make it quicker to summarise multiple cols
 dwp_data_locality <- dwp_data |> 
   group_by(locality) |> 
   summarise(across(contains("count"), sum, .names = "{.col}"))
-
-# # then pivot DWP counts longer to make them easier to work with
-# dwp_data_locality <- dwp_data_locality |> 
-#   pivot_longer(cols = claimant_count:pip_count_16_24_mh,
-#                names_to = "metric",
-#                values_to = "count")
 
 # calculate age-specific rates using counts and population estimates
 # rates per 1000 residents
@@ -181,10 +198,26 @@ dwp_data_locality <- dwp_data_locality |>
          pip_rate_16_64_mh = pip_count_16_64_mh/`count_16-64`*1000,
          pip_rate_16_24_mh = pip_count_16_24_mh/`count_16-24`*1000)
 
+
+# Summarise ethnic minority % by locality ---------------------------------
+
+# first back-calculate count from % and population estimate
+dwp_data_ethnic_minority <- dwp_data_ethnic_minority |> 
+  mutate(ethnic_minority_count = (ethnic_minority_pct/100)*population)
+
+# then summarise by locality and recalculate %
+dwp_data_ethnic_minority_locality <- dwp_data_ethnic_minority |> 
+  group_by(locality) |> 
+  summarise(ethnic_minority_count = sum(ethnic_minority_count),
+            population = sum(population)) |> 
+  mutate(ethnic_minority_pct = ethnic_minority_count/population*100)
+
 # Tidy up dfs to write to excel -------------------------------------------
 
+# claimant counts
 dwp_data_locality_final <- dwp_data_locality |> 
-  rename(`Aged 16-64 claimant rate per 1000` = claimant_rate,
+  rename(Locality = locality,
+         `Aged 16-64 claimant rate per 1000` = claimant_rate,
          `Aged 18-24 claimant rate per 1000` = claimant_rate_18_24,
          `Aged 16-64 UC claimants declaring health condition rate per 1000` = health_condition_rate,
          `Aged 18-24 UC claimants declaring health condition rate per 1000` = health_condition_rate_18_24,
@@ -197,3 +230,18 @@ dwp_data_locality_final <- dwp_data_locality |>
          `Aged 16-64 claiming PIP with MH condition rate per 1000` = pip_rate_16_64_mh,
          `Aged 16-24 claiming PIP with MH condition rate per 1000` = pip_rate_16_24_mh) |> 
   select(-contains("count"))
+
+dwp_data_ethnic_minority_locality_final <- dwp_data_ethnic_minority_locality |>
+  mutate(ethnic_minority_count = round(ethnic_minority_count)) |> 
+  rename(Locality = locality,
+         `Ethnic minority count estimate (all residents, non-white)` = ethnic_minority_count,
+         `% Ethnic minority estimate (all residents, non-white)` = ethnic_minority_pct) |> 
+  select(-population)
+
+locality_wards_best_fit_final <- locality_wards_best_fit |> 
+  mutate(pct = as.numeric(pct),
+         pct = round(pct, 2)) |> 
+  rename(Ward = wd25nm,
+         Locality = locality,
+         `% of ward falling within locality boundary` = pct)
+
