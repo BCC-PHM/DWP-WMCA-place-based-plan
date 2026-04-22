@@ -245,3 +245,12 @@ locality_wards_best_fit_final <- locality_wards_best_fit |>
          Locality = locality,
          `% of ward falling within locality boundary` = pct)
 
+
+# Write to excel ----------------------------------------------------------
+
+write_list <- list(`Claimant rates by locality` = dwp_data_locality_final,
+                   `Ethnic minority % by locality` = dwp_data_ethnic_minority_locality_final,
+                   `Ward to locality best fit table` = locality_wards_best_fit_final)
+
+writexl::write_xlsx(write_list,
+                    path = "output/Birmingham claimant rates by locality.xlsx")
