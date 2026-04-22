@@ -165,12 +165,35 @@ dwp_data_locality <- dwp_data |>
 #                names_to = "metric",
 #                values_to = "count")
 
-# calculate rates and pcts
-dwp_data_locality |> 
+# calculate age-specific rates using counts and population estimates
+# rates per 1000 residents
+dwp_data_locality <- dwp_data_locality |> 
   mutate(claimant_rate = claimant_count/`count_16-64`*1000,
          claimant_rate_18_24 = claimant_count_18_24/`count_18-24`*1000,
          health_condition_rate = health_condition_count/`count_16-64`*1000,
-         health_condition_pct = health_condition_count/claimant_count*100,
-         health_condition_rate_18_24 = health_condition_count_18_24/`count_18-24`*1000
-         health_condition_pct_18_24 = health_condition_count_18_24/claimant_count_18_24*100) |> 
-  select(locality, claimant_rate)
+         health_condition_rate_18_24 = health_condition_count_18_24/`count_18-24`*1000,
+         inactive_claimant_rate = inactive_claimant_count/`count_16-64`*1000,
+         inactive_claimant_rate_18_24 = inactive_claimant_count_18_24/`count_18-24`*1000,
+         claimant_rate_50plus = claimant_count_50plus/`count_50-64`*1000,
+         long_term_unemployed_rate = long_term_unemployed_count/`count_16-64`*1000,
+         long_term_unemployed_rate_18_24 = long_term_unemployed_count_18_24/`count_18-24`*1000,
+         pip_rate_16_64 = pip_count_16_64/`count_16-64`*1000,
+         pip_rate_16_64_mh = pip_count_16_64_mh/`count_16-64`*1000,
+         pip_rate_16_24_mh = pip_count_16_24_mh/`count_16-24`*1000)
+
+# Tidy up dfs to write to excel -------------------------------------------
+
+dwp_data_locality_final <- dwp_data_locality |> 
+  rename(`Aged 16-64 claimant rate per 1000` = claimant_rate,
+         `Aged 18-24 claimant rate per 1000` = claimant_rate_18_24,
+         `Aged 16-64 UC claimants declaring health condition rate per 1000` = health_condition_rate,
+         `Aged 18-24 UC claimants declaring health condition rate per 1000` = health_condition_rate_18_24,
+         `Aged 16-64 inactive UC claimant rate per 1000` = inactive_claimant_rate,
+         `Aged 18-24 inactive UC claimant rate per 1000` = inactive_claimant_rate_18_24,
+         `Aged 50+ claimant rate per 1000` = claimant_rate_50plus,
+         `Aged 16-64 long term unemployed rate per 1000` = long_term_unemployed_rate,
+         `Aged 18-24 long term unemployed rate per 1000` = long_term_unemployed_rate_18_24,
+         `Aged 16-64 claiming PIP rate per 1000` = pip_rate_16_64,
+         `Aged 16-64 claiming PIP with MH condition rate per 1000` = pip_rate_16_64_mh,
+         `Aged 16-24 claiming PIP with MH condition rate per 1000` = pip_rate_16_24_mh) |> 
+  select(-contains("count"))
