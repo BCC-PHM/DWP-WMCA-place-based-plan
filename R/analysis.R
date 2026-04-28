@@ -216,7 +216,27 @@ dwp_data_ethnic_minority_locality <- dwp_data_ethnic_minority |>
 
 # claimant counts
 dwp_data_locality_final <- dwp_data_locality |> 
+  # reorder
+  select(locality, claimant_count, claimant_rate, claimant_count_18_24, claimant_rate_18_24, claimant_count_50plus, claimant_rate_50plus, 
+         health_condition_count, health_condition_rate, health_condition_count_18_24, health_condition_rate_18_24, 
+         inactive_claimant_count, inactive_claimant_rate, inactive_claimant_count_18_24, inactive_claimant_rate_18_24,
+         long_term_unemployed_count, long_term_unemployed_rate, long_term_unemployed_count_18_24, long_term_unemployed_rate_18_24,
+         pip_count_16_64, pip_rate_16_64, pip_count_16_64_mh, pip_rate_16_64_mh, pip_count_16_24_mh, pip_rate_16_24_mh,
+         `count_16-64`, `count_16-24`, `count_18-24`, `count_50-64`) |> 
+  # rename
   rename(Locality = locality,
+         `Aged 16-64 claimant count` = claimant_count,
+         `Aged 18-24 claimant count` = claimant_count_18_24,
+         `Aged 16-64 UC claimants declaring health condition count` = health_condition_count,
+         `Aged 18-24 UC claimants declaring health condition count` = health_condition_count_18_24,
+         `Aged 16-64 inactive UC claimant count` = inactive_claimant_count,
+         `Aged 18-24 inactive UC claimant count` = inactive_claimant_count_18_24,
+         `Aged 50+ claimant count` = claimant_count_50plus,
+         `Aged 16-64 long term unemployed count` = long_term_unemployed_count,
+         `Aged 18-24 long term unemployed count` = long_term_unemployed_count_18_24,
+         `Aged 16-64 claiming PIP count` = pip_count_16_64,
+         `Aged 16-64 claiming PIP with MH condition count` = pip_count_16_64_mh,
+         `Aged 16-24 claiming PIP with MH condition count` = pip_count_16_24_mh,
          `Aged 16-64 claimant rate per 1000` = claimant_rate,
          `Aged 18-24 claimant rate per 1000` = claimant_rate_18_24,
          `Aged 16-64 UC claimants declaring health condition rate per 1000` = health_condition_rate,
@@ -228,19 +248,24 @@ dwp_data_locality_final <- dwp_data_locality |>
          `Aged 18-24 long term unemployed rate per 1000` = long_term_unemployed_rate_18_24,
          `Aged 16-64 claiming PIP rate per 1000` = pip_rate_16_64,
          `Aged 16-64 claiming PIP with MH condition rate per 1000` = pip_rate_16_64_mh,
-         `Aged 16-24 claiming PIP with MH condition rate per 1000` = pip_rate_16_24_mh) |> 
-  select(-contains("count"))
+         `Aged 16-24 claiming PIP with MH condition rate per 1000` = pip_rate_16_24_mh,
+         `Population aged 16-64` = `count_16-64`,
+         `Population aged 16-24` = `count_16-24`,
+         `Population aged 18-24` = `count_18-24`,
+         `Population aged 50-64` = `count_50-64`)
+  
 
 dwp_data_ethnic_minority_locality_final <- dwp_data_ethnic_minority_locality |>
   mutate(ethnic_minority_count = round(ethnic_minority_count)) |> 
   rename(Locality = locality,
          `Ethnic minority count estimate (all residents, non-white)` = ethnic_minority_count,
-         `% Ethnic minority estimate (all residents, non-white)` = ethnic_minority_pct) |> 
-  select(-population)
+         `% Ethnic minority estimate (all residents, non-white)` = ethnic_minority_pct,
+         `Total population` = population)
 
 locality_wards_best_fit_final <- locality_wards_best_fit |> 
   mutate(pct = as.numeric(pct),
          pct = round(pct, 2)) |> 
+  arrange(locality) |> 
   rename(Ward = wd25nm,
          Locality = locality,
          `% of ward falling within locality boundary` = pct)
