@@ -15,6 +15,11 @@ locality_boundaries <- read_sf("data/boundaries-locality-bsol.geojson") |>
 ward_boundaries <- read_sf("data/boundaries-wards-2025-wmca.geojson") |> 
   filter(lad25nm == "Birmingham")
 
+# pre-2024 constituencies aka current districts
+pcon22_boundaries <- read_sf("data/boundaries-constituencies-2022-wmca.geojson") |> 
+  filter(local_authority_name == "Birmingham") |> 
+  mutate(pcon22nm = str_replace(pcon22nm, "Birmingham, ", ""))
+
 
 # Read in DWP data --------------------------------------------------------
 
@@ -157,7 +162,71 @@ locality_wards_best_fit <- locality_wards |>
   distinct(wd25nm,
            .keep_all = T)
 
+# Get best fit of wards to pre-2024 constituencies to see if this changes allocations -------------------------------------
 
+con_wards_full <- data.frame()
+con_wards <- data.frame()
+
+sf_use_s2(FALSE)
+
+cons <- pcon22_boundaries$pcon22nm
+
+for (con in cons) {
+  # clip wards inside district boundary
+  temp_con_wards <- pcon22_boundaries |> 
+    filter(pcon22nm == con)|> 
+    st_intersection(ward_boundaries) |> 
+    mutate(pcon22nm = con)
+  
+  # find out the area of each clipped ward
+  temp_con_wards$area <- st_area(temp_con_wards)
+  
+  # pull out unclipped wards for this con
+  temp_con_wards_full <- ward_boundaries |> 
+    filter(wd25cd %in% temp_con_wards$wd25cd) |> 
+    mutate(pcon22nm = con)
+  
+  # find area of unclipped ward and add to clipped ward sf
+  temp_con_wards$full_area <- st_area(temp_con_wards_full)
+  
+  # calulate what % of each ward is inside the boundary
+  temp_con_wards <- temp_con_wards |> 
+    mutate(pct = area/full_area*100)
+  
+  # # recalculate unclipped wards now wards with <1% are excluded
+  # temp_con_wards_full <- ward_boundaries |> 
+  #   filter(wd25cd %in% temp_con_wards$wd25cd) |> 
+  #   mutate(locality = l)
+  
+  # append temp dfs to main df
+  con_wards_full <- rbind(con_wards_full,
+                               temp_con_wards_full)
+  
+  con_wards <- rbind(con_wards,
+                          temp_con_wards)
+}
+
+con_wards_best_fit <- con_wards |> 
+  as.data.frame() |> 
+  select(wd25nm, pcon22nm, pct) |> 
+  arrange(desc(pct)) |> 
+  distinct(wd25nm,
+           .keep_all = T) |> 
+  mutate(locality = case_when(pcon22nm == "Sutton Coldfield" ~ "North",
+                              pcon22nm == "Erdington" ~ "North",
+                              pcon22nm == "Perry Barr" ~ "West",
+                              pcon22nm == "Ladywood" ~ "West",
+                              pcon22nm == "Hodge Hill" ~ "East",
+                              pcon22nm == "Yardley" ~ "East",
+                              pcon22nm == "Edgbaston" ~ "South",
+                              pcon22nm == "Northfield" ~ "South",
+                              pcon22nm == "Hall Green" ~ "Central",
+                              pcon22nm == "Selly Oak" ~ "Central"))
+
+locality_wards_best_fit |> 
+  left_join(con_wards_best_fit,
+            by = "wd25nm") |> 
+  View()
 # Join DWP data, pop ests and locality best fit ---------------------------
 
 # claimant data
